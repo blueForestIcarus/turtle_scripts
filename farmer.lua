@@ -19,6 +19,10 @@ AROUND=9	--turning only
 FORWARD=10	
 BACKWARD=11
 
+--control constants
+ERR=  -1
+OKAY= -2
+
 
 VEC_ZERO = vector.new(0,0,0)
 
@@ -75,7 +79,10 @@ end
 function move(command)
 	--executes single movement instruction (for now)
 	--if turning required, will always move forward
-	--LEFT and RIGHT and AROUND linked to turn function
+	--LEFT RIGHT and AROUND do not apply
+	--not sure if this should support cardinals
+	--	seeing as how the same thing can be accomplished
+	--	with seperate calls to turn(<direction>) and move(FORWARD) 
 	dir = command
 	f = nil
 	newpos = pm.current
@@ -83,17 +90,7 @@ function move(command)
 
 	if dir == STAY then
 		--easy one
-		return
-	elseif dir == LEFT then
-		pm.turn(LEFT)
-		return
-	elseif dir == RIGHT then
-		pm.turn(RIGHT)
-		return
-	elseif dir == AROUND then
-		pm.turn(AROUND)
 		return 
-
 	elseif dir == UP then
 		f = T.up
 		newpos = pm.current + vector.new(0,1,0)
@@ -102,38 +99,62 @@ function move(command)
 		newpos = pm.current + vector.new(0,-1,0)
 	elseif dir == FORWARD then
 		f = T.forward
-		newpos = pm.current + VEC_ZERO
-		if pm.facing == NORTH then
-			newpos.z = pos.z - 1
-		elseif pm.facing == SOUTH then
-			newpos.z = pos.z + 1
-		elseif pm.facing == WEST then
-			newpos.x = pos.x - 1
-		elseif pm.facing == EAST then
-			newpos.x = pos.x + 1
-		end 
-	
+		newpos = pm.current + cardinal2vec(pm.facing)
 	elseif dir == BACKWARD then
 		f = T.back
-		pos = pm.current + VEC_ZERO
-		if pm.facing == NORTH then
-			newpos.z = pos.z + 1
-		elseif pm.facing == SOUTH then
-			newpos.z = pos.z - 1
-		elseif pm.facing == WEST then
-			newpos.x = pos.x + 1
-		elseif pm.facing == EAST then
-			newpos.x = pos.x - 1
-		end 			
+		newpos = pm.current - cardinal2vec(pm.facing) 
 
-	else --gps TODO
-	end 
+
+	elseif is_cardinal(dir) then
+		--similar to the turn function, this could be done with recursion
+		pm.turn(dir)
+		f = t.forward
+		newpos = pm.current + cardinal2vec(pm.facing)
+
+	else
+		--what are they even trying to do
+		return ERR
+	end
+
+	return FINE 
+end
+
+function cardinal2vec(dir)
+	vec = vector.new(0,0,0)
+	if dir == NORTH then
+		vec.z = -1
+	elseif dir == SOUTH then
+		vec.z = 1
+	elseif dir == WEST then
+		vec.x = -1
+	elseif dir == EAST then
+		vec.x = 1
+	else
+		--must be cardinal direction
+		return ERR end
+	return vec
+end
+
+function is_cardinal(dir)
+	if (dir == NORTH)
+		or (dir == SOUTH)
+		or (dir == EAST)
+		or (dir == WEST)
+	then
+		return true
+	else 
+		return false
+	end
 end
 
 function turn(command)
 	dir = command
 
-	if dir == LEFT then
+	if dir == STAY then
+		--easy one
+		return
+
+	elseif dir == LEFT then
 		T.turnLeft()
 		if pm.facing == NORTH then
 			pm.facing = WEST
@@ -143,6 +164,8 @@ function turn(command)
 			pm.facing = EAST
 		elseif pm.facing == WEST then
 			pm.facing = SOUTH
+		else
+			--UNREACHABLE
 		end
 		
 	elseif dir == RIGHT then
@@ -155,6 +178,8 @@ function turn(command)
 			pm.facing = WEST
 		elseif pm.facing == WEST then
 			pm.facing = NORTH
+		else
+			--UNREACHABLE
 		end	
 	elseif dir == AROUND then
 		T.turnRight()
@@ -167,9 +192,87 @@ function turn(command)
 			pm.facing = NORTH
 		elseif pm.facing == WEST then
 			pm.facing = WEST
+		else 
+			--UNREACHABLE
 		end	
-	end--TODO gps
-end 
+	
+
+	elseif is_cardinal(dir) then 
+		turning = whichway(pm.facing, dir)
+		--I am not sure whether this should be implemented like so...
+		--or if it should just call turn(turning), going with this for now
+		if turning == STAY then
+			--easy one: do nothing
+		elseif turning == AROUND then
+			T.turnRight()
+			T.turnRight()
+		elseif turning == RIGHT then
+			T.turnRight()
+		elseif turning == LEFT then
+			T.turnLeft()
+		else
+			--UNREACHABLE
+		end
+		pm.facing = dir
+
+	end
+
+end
+
+function negate(dir)
+	if dir == NORTH then
+		return SOUTH
+	elseif dir == EAST then
+		return WEST
+	elseif dir == SOUTH then
+		return NORTH 
+	elseif dir == WEST then
+		return EAST 
+	elseif dir == LEFT then
+		return RIGHT
+	elseif dir == RIGHT then 
+		return LEFT
+	elseif dir == FORWARD then
+		return BACKWARD
+	elseif dir == BACKWARD then
+		return FORWARD
+	elseif dir == AROUND then
+		return STAY 	
+	else 
+		--what are they even trying to negate?
+		return ERR 	
+	end
+end
+
+function whichway(olddir, newdir)
+	--returns LEFT, RIGHT, AROUND, or STAY
+	--returns how to go from olddir to newdir
+	--where olddir and newdir are cardinals
+	if olddir == newdir then
+		return STAY
+
+	elseif oldir == pm.negate(newdir) then
+		return AROUND
+
+	elseif (olddir == NORTH and newdir == EAST) 
+		or (olddir == EAST and newdir == SOUTH)
+		or (olddir == SOUTH and newdir == WEST)
+		or (olddir == WEST and newdir == NORTH)
+	then
+		return RIGHT
+	
+	elseif (olddir == NORTH and newdir == WEST) 
+		or (olddir == EAST and newdir == NORTH)
+		or (olddir == SOUTH and newdir == EAST)
+		or (olddir == WEST and newdir == SOUTH)
+	then
+		return LEFT 
+	
+	else
+		--what are they even passing?
+		return ERR
+	end 
+
 
 function digforward(times)
 	T.dig()
