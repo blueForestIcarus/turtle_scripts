@@ -5,6 +5,9 @@ pm = {}
 pm.waypoints = {}
 pm.timeout = 5
 
+--inventory manager
+im = {}
+
 -- directional constants
 STAY=0
 UP=1
@@ -19,9 +22,18 @@ AROUND=9	--turning only
 FORWARD=10	
 BACKWARD=11
 
+-- action constants
+TURN = 100
+MOVE = 200
+PLACE = 300
+DIG = 400
+
+
 --control constants
-ERR=  -1
+ERR = -1
 OKAY= -2
+FAIL= -3
+FUEL= -4
 
 
 VEC_ZERO = vector.new(0,0,0)
@@ -76,47 +88,174 @@ function locate()
 	return err
 end 
 
+
+function serial(chain)
+	for command in chain do 
+		dir = math.fmod(command, 100)
+		action = math.fmod(command - dir, 1000)
+		count = command - action - dir
+
+		for i=1,count do 
+			if action == TURN then
+				pm.turn(dir)
+			elseif action == MOVE then
+				pm.move(dir)
+			elseif action == PLACE then
+				--TODO
+			elseif action == DIG then
+				--TODO
+			else
+				--what are they even trying to do.
+				return ERR
+			end
+		end 
+	end
+end
+
+function loader(text)
+	--parses text instructions to serial
+	command = parts(split(text, ","))
+	serial = {}
+	functions 
+	for index, block in ipairs(command) do
+		if string.len(block) < 2 then
+			return ERR
+		end 
+
+		action = string.sub(block, 1, 1)
+		dir = string.sub(block, 2, 2)
+		if string.len(block > 2) then
+			count = tonumber(string.sub(block, 3))  --TODO handle potencial error
+		else
+			count = 1
+		end
+
+		if action == "M" then
+			serial[index] = MOVE
+		elseif action == "T" then
+			serial[index] = TURN
+		elseif action == "P" then
+			serial[index] = PLACE
+		elseif action == "D" then
+			serial[index] = DIG
+		else
+			--what are they even trying to do
+			return err
+		end 
+
+		if dir == "f" then
+			serial[index] = score[index] + FORWARD
+		elseif dir == "b" then
+			serial[index] = score[index] + BACKWARD
+		elseif dir == "l" then
+			serial[index] = score[index] + LEFT
+		elseif dir == "r" then
+			serial[index] = score[index] + RIGHT
+		elseif dir == "a" then
+			serial[index] = score[index] + AROUND
+		elseif dir == "u" then
+			serial[index] = score[index] + UP
+		elseif dir == "d" then
+			serial[index] = score[index] + DOWN
+		elseif dir == "n" then
+			serial[index] = score[index] + NORTH
+		elseif dir == "s" then
+			serial[index] = score[index] + SOUTH
+		elseif dir == "e" then
+			serial[index] = score[index] + EAST
+		elseif dir == "w" then
+			serial[index] = score[index] + WEST
+		elseif dir == "o" then
+			serial[index] = score[index] + STAY
+		else
+			--what are they even trying to do
+			return ERR
+		end 
+
+		serial[index] = serial[index] + (count*1000)
+	end
+	return serial
+end
+
+function loadandrun(text)
+	command = serial.loader(text)
+	serial = serial.serial(command)
+end
+
 function move(command)
 	--executes single movement instruction (for now)
+	--if no fuel returns FUEL
+	--if obstructed returns FAIL
+	--if invalid command returns ERR
+	--if suuccessful returns OKAY
 	--if turning required, will always move forward
 	--LEFT RIGHT and AROUND do not apply
 	--not sure if this should support cardinals
 	--	seeing as how the same thing can be accomplished
 	--	with seperate calls to turn(<direction>) and move(FORWARD) 
 	dir = command
-	f = nil
-	newpos = pm.current
-	olddir = pm.facing
+
+	if T.getFuelLevel() == 0 then	
+		return FUEL
+	end
+
 
 	if dir == STAY then
 		--easy one
-		return 
+		return OKAY
 	elseif dir == UP then
-		f = T.up
-		newpos = pm.current + vector.new(0,1,0)
-	elseif dir == DOWN then
-		f = T.down
-		newpos = pm.current + vector.new(0,-1,0)
-	elseif dir == FORWARD then
-		f = T.forward
-		newpos = pm.current + cardinal2vec(pm.facing)
-	elseif dir == BACKWARD then
-		f = T.back
-		newpos = pm.current - cardinal2vec(pm.facing) 
+		if T.up() then
+			pm.current = pm.current + vector.new(0,1,0)
+			return OKAY
+		end
 
+	elseif dir == DOWN then
+		if T.down() then
+			pm.current = pm.current + vector.new(0,-1,0)
+			return OKAY
+		end
+
+	elseif dir == FORWARD then
+		if T.forward() then
+			pm.current = pm.current + cardinal2vec(pm.facing)
+			return OKAY
+		end
+
+	elseif dir == BACKWARD then
+		if T.back() then
+			pm.current = pm.current - cardinal2vec(pm.facing) 
+			return OKAY
+		end
 
 	elseif is_cardinal(dir) then
-		--similar to the turn function, this could be done with recursion
+		--uses a tad bit of recursion
 		pm.turn(dir)
-		f = t.forward
-		newpos = pm.current + cardinal2vec(pm.facing)
-
+		if pm.move(FORWARD) == OKAY then
+			return OKAY
+		else 
+			pm.turn(pm.negate(dir))
+			return FAIL
+		end
 	else
 		--what are they even trying to do
 		return ERR
 	end
 
-	return FINE 
+	return FAIL
+end
+
+function refuel()
+	--TODO this could be much better
+	for i = 1, 16 do -- loop through the slots
+		turtle.select(i) -- change to the slot
+		if turtle.refuel(0) then -- if it's valid fuel
+			turtle.refuel(8)
+			return true
+		end
+	end
+
+	-- out of fuel
+	return false
 end
 
 function cardinal2vec(dir)
@@ -274,6 +413,8 @@ function whichway(olddir, newdir)
 	end 
 
 
+
+
 function digforward(times)
 	T.dig()
 	T.forward() --TODO error proof
@@ -286,6 +427,9 @@ end
 function farm()
 	--todo go to center of farm, plant height
 	--todo replant
+	command "((Df,Mf)4,Tl,Df,Tl,(Df,Mf)7,Df,Tr,Df,Mf,Tr,(Df,Mf)5, Df,Tl,Df,Mf,Tl,(Df,Mf)3,Df,Tr,Df,Mf,Tr,Df,Mf,Df,Tr,Mf4,Tr)2"
+	serial.loadandrun(command)
+	
 	for i=1,2 do
 		digforward(4)
 		T.turnLeft()
