@@ -27,7 +27,8 @@ TURN = 100
 MOVE = 200
 PLACE = 300
 DIG = 400
-
+DROP = 500
+SUCK = 600
 
 --control constants
 ERR = -1
@@ -35,8 +36,20 @@ OKAY= -2
 FAIL= -3
 FUEL= -4
 
+---VEC_ZERO = vector.new(0,0,0)
 
-VEC_ZERO = vector.new(0,0,0)
+function split(inputstr, sep)
+        if sep == nil then
+                sep = "%s"
+        end
+        local t={}
+		  local i=1
+        for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+                t[i] = str
+                i = i + 1
+        end
+        return t
+end
 
 --updates orientation an position based on gps
 function orient()
@@ -90,7 +103,7 @@ end
 
 
 function serial(chain)
-	for command in chain do 
+	for i, command in ipairs(chain) do 
 		dir = math.fmod(command, 100)
 		action = math.fmod(command - dir, 1000)
 		count = command - action - dir
@@ -114,9 +127,45 @@ end
 
 function loader(text)
 	--parses text instructions to serial
-	command = parts(split(text, ","))
+	--TODO support functions
+	local level = 0
+	local open = {}
+	local i = 1
+	while i <= string.len(text) do
+		local c = text:sub(i,i)
+		if c == "(" then
+			level = level + 1
+			open[level] = i
+			i = i + 1
+		elseif c == ")" then
+			local sub = text:sub(1 + open[level], i-1) .. ","
+			local num = 1
+			local l = 0
+
+			if i < text:len() and text:sub(i+1,i+1) ~= "," and text:sub(i+1,i+1) ~= ")"then
+				n = split(text:sub(i+1), ",)")[1]
+				l = string.len(n)
+				num = tonumber(n)
+				if num == nil then
+					--you dun goofed
+					return ERR
+				end
+			end 
+
+			local new = text:sub(1, open[level] - 1) .. string.rep(sub, num)
+
+			text = new:sub(1,-2) .. text:sub(i+1+l)
+			level = level - 1
+			i = string.len(new)
+		else
+			i = i + 1
+		end
+	end 
+	print(text)
+
+	command = split(text, ",")
 	serial = {}
-	functions 
+	
 	for index, block in ipairs(command) do
 		if string.len(block) < 2 then
 			return ERR
@@ -124,7 +173,7 @@ function loader(text)
 
 		action = string.sub(block, 1, 1)
 		dir = string.sub(block, 2, 2)
-		if string.len(block > 2) then
+		if string.len(block) > 2 then
 			count = tonumber(string.sub(block, 3))  --TODO handle potencial error
 		else
 			count = 1
@@ -144,29 +193,29 @@ function loader(text)
 		end 
 
 		if dir == "f" then
-			serial[index] = score[index] + FORWARD
+			serial[index] = serial[index] + FORWARD
 		elseif dir == "b" then
-			serial[index] = score[index] + BACKWARD
+			serial[index] = serial[index] + BACKWARD
 		elseif dir == "l" then
-			serial[index] = score[index] + LEFT
+			serial[index] = serial[index] + LEFT
 		elseif dir == "r" then
-			serial[index] = score[index] + RIGHT
+			serial[index] = serial[index] + RIGHT
 		elseif dir == "a" then
-			serial[index] = score[index] + AROUND
+			serial[index] = serial[index] + AROUND
 		elseif dir == "u" then
-			serial[index] = score[index] + UP
+			serial[index] = serial[index] + UP
 		elseif dir == "d" then
-			serial[index] = score[index] + DOWN
+			serial[index] = serial[index] + DOWN
 		elseif dir == "n" then
-			serial[index] = score[index] + NORTH
+			serial[index] = serial[index] + NORTH
 		elseif dir == "s" then
-			serial[index] = score[index] + SOUTH
+			serial[index] = serial[index] + SOUTH
 		elseif dir == "e" then
-			serial[index] = score[index] + EAST
+			serial[index] = serial[index] + EAST
 		elseif dir == "w" then
-			serial[index] = score[index] + WEST
+			serial[index] = serial[index] + WEST
 		elseif dir == "o" then
-			serial[index] = score[index] + STAY
+			serial[index] = serial[index] + STAY
 		else
 			--what are they even trying to do
 			return ERR
@@ -412,7 +461,7 @@ function whichway(olddir, newdir)
 		return ERR
 	end 
 
-
+end
 
 
 function digforward(times)
@@ -427,9 +476,10 @@ end
 function farm()
 	--todo go to center of farm, plant height
 	--todo replant
-	command "((Df,Mf)4,Tl,Df,Tl,(Df,Mf)7,Df,Tr,Df,Mf,Tr,(Df,Mf)5, Df,Tl,Df,Mf,Tl,(Df,Mf)3,Df,Tr,Df,Mf,Tr,Df,Mf,Df,Tr,Mf4,Tr)2"
+	command = "((Df,Mf)4,Tl,Df,Tl,(Df,Mf)7,Df,Tr,Df,Mf,Tr,(Df,Mf)5,Df,Tl,Df,Mf,Tl,(Df,Mf)3,Df,Tr,Df,Mf,Tr,Df,Mf,Df,Tr,Mf4,Tr)2"
 	serial.loadandrun(command)
 	
+	--[[
 	for i=1,2 do
 		digforward(4)
 		T.turnLeft()
@@ -456,12 +506,17 @@ function farm()
 		T.forward(4)
 		T.turnRight()
 	end
+	--]]
 end	
 	
-	
+s = loader("((Df,Mf)4,Tl,Df,Tl,(Df,Mf)7,Df,Tr,Df,Mf,Tr,(Df,Mf)5,Df,Tl,Df,Mf,Tl,(Df,Mf)3,Df,Tr,Df,Mf,Tr,Df,Mf,Df,Tr,Mf4,Tr)2")
+for i,v in ipairs(s) do
+ print(v)
+end
 
-os.loadAPI(points)
-pm.orient()--TODO this isnt a function of pm yet
+
+---os.loadAPI(points)
+---pm.orient()--TODO this isnt a function of pm yet
 
 
 
