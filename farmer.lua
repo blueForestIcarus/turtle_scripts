@@ -104,21 +104,39 @@ end
 
 function serial(chain)
 	for i, command in ipairs(chain) do 
-		dir = math.fmod(command, 100)
-		action = math.fmod(command - dir, 1000)
-		count = command - action - dir
-
+		local dir = math.fmod(command, 100)
+		local action = math.fmod(command - dir, 1000)
+		local count = command - action - dir
+		local result = OKAY
+		local i
 		for i=1,count do 
 			if action == TURN then
-				pm.turn(dir)
+				result = pm.turn(dir)
 			elseif action == MOVE then
-				pm.move(dir)
+				result = pm.move(dir)
 			elseif action == PLACE then
 				--TODO
 			elseif action == DIG then
 				--TODO
+			elseif action == DROP then
+				--TODO
+			elseif action == SUCK then
+				--TODO
 			else
 				--what are they even trying to do.
+				return ERR
+			end
+
+			if result == FUEL then
+				if not im.refuel() then
+					print("out of fuel")
+					return FUEL
+				end
+			else if result == FAIL then
+				print("Action cannot be done. A" .. tostring(action) .. " B" .. tostring(direction))
+				return FAIL
+			else if result == ERR then
+				print("Action: " .. tostring(action) .. "has no such Direction: " .. tostring(direction))
 				return ERR
 			end
 		end 
@@ -187,9 +205,13 @@ function loader(text)
 			serial[index] = PLACE
 		elseif action == "D" then
 			serial[index] = DIG
+		elseif action == "R" then
+			serial[index] = DROP
+		elseif action == "S" then
+			serial[index] = SUCK
 		else
 			--what are they even trying to do
-			return err
+			return ERR
 		end 
 
 		if dir == "f" then
